@@ -65,23 +65,6 @@ case "$PKG_MGR" in
     ;;
 esac
 
-# Ensure hdparm is installed
-echo "Ensuring hdparm is installed..."
-case "$PKG_MGR" in
-  apt)
-    $SUDO apt-get install -y hdparm
-    ;;
-  yum)
-    $SUDO yum install -y hdparm
-    ;;
-  dnf)
-    $SUDO dnf install -y hdparm
-    ;;
-  pacman)
-    $SUDO pacman -S --noconfirm hdparm
-    ;;
-esac
-
 echo ""
 echo "=== Installation Complete ==="
 echo ""
