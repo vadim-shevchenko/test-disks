@@ -240,7 +240,7 @@ for PART in "$@"; do
   fi
   
   # Kernel errors
-  run_cmd "4. Recent Kernel Errors (disk $DISK)" bash -c "dmesg | grep -i '$DISK' | tail -10 || echo '  No recent errors found in dmesg'"
+  run_cmd "4. Recent Kernel Errors (disk $DISK)" $SUDO bash -c "dmesg | grep -i '$DISK' | tail -10 || echo '  No recent errors found in dmesg'"
   
   echo ""
   say "${YELLOW}=== SPEED TESTS ===${NC}"
