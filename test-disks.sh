@@ -167,10 +167,6 @@ cleanup_temp() {
   fi
 }
 
-# Create user temp dir if needed
-mkdir -p /home/vadim/tmp 2>/dev/null || true
-say "${GREEN}[LOG] Ensured /home/vadim/tmp directory exists${NC}"
-
 # Process each partition
 for PART in "$@"; do
   echo ""
