@@ -1,6 +1,6 @@
 #!/bin/bash
 # Script to perform disk tests - speed and stability
-# Args: mounted partition files like /dev/sdb1
+# Args: [--subdir PATH] mounted partition files like /dev/sdb1
 
 set -e
 
@@ -54,12 +54,82 @@ NVME=$(find_tool nvme || true)
 FIO=$(find_tool fio || true)
 IOSTAT=$(find_tool iostat || true)
 
-# Check if partitions are provided
-if [ $# -eq 0 ]; then
-  echo -e "${RED}Error: No partitions specified${NC}"
-  echo "Usage: $0 /dev/sdX1 [ /dev/sdY1 ... ]"
+# Temporary folder prefix for non-OS disks (relative to the mount point)
+SUBDIR=""
+
+usage() {
+  echo "Usage: $0 [--subdir PATH] /dev/sdX1 [ /dev/sdY1 ... ]"
   echo ""
-  echo "Example: $0 /dev/sdb1"
+  echo "  -s, --subdir PATH  Create the temporary folder under PATH relative to the"
+  echo "                     mount point of non-OS disks (default: mount point root)"
+  echo ""
+  echo "Example: $0 --subdir data/tests /dev/sdb1"
+}
+
+# Parse options; everything else is treated as a partition
+PARTITIONS=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -s|--subdir)
+      if [ $# -lt 2 ] || [ -z "$2" ]; then
+        echo -e "${RED}Error: $1 requires a non-empty PATH${NC}"
+        echo ""
+        usage
+        exit 1
+      fi
+      SUBDIR="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      while [ $# -gt 0 ]; do
+        PARTITIONS+=("$1")
+        shift
+      done
+      ;;
+    -*)
+      echo -e "${RED}Error: Unknown option: $1${NC}"
+      echo ""
+      usage
+      exit 1
+      ;;
+    *)
+      PARTITIONS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+# Normalize and validate the sub-folder: it must stay within the mount point
+if [ -n "$SUBDIR" ]; then
+  while [ "${SUBDIR#/}" != "$SUBDIR" ]; do
+    SUBDIR="${SUBDIR#/}"
+  done
+  case "/$SUBDIR/" in
+    */../*)
+      echo -e "${RED}Error: --subdir must not contain '..'${NC}"
+      echo ""
+      usage
+      exit 1
+      ;;
+  esac
+  if [ -z "$SUBDIR" ]; then
+    echo -e "${RED}Error: --subdir requires a non-empty PATH${NC}"
+    echo ""
+    usage
+    exit 1
+  fi
+fi
+
+# Check if partitions are provided
+if [ ${#PARTITIONS[@]} -eq 0 ]; then
+  echo -e "${RED}Error: No partitions specified${NC}"
+  echo ""
+  usage
   exit 1
 fi
 
@@ -121,6 +191,9 @@ create_temp_dir() {
   
   if is_os_partition "$part"; then
     say "${YELLOW}  Partition $part is on OS disk/root related${NC}" >&2
+    if [ -n "$SUBDIR" ]; then
+      say "${YELLOW}[LOG] --subdir is ignored for OS disk partitions${NC}" >&2
+    fi
     local user_home="${HOME:-/home/$(whoami)}"
     mkdir -p "$user_home" 2>/dev/null || true
     tmpdir="$user_home/test-disks-tmp"
@@ -129,7 +202,12 @@ create_temp_dir() {
     local mnt=$(get_mount_point "$part")
     if [ -n "$mnt" ]; then
       say "${GREEN}  Partition $part mounted at $mnt${NC}" >&2
-      tmpdir="$mnt/test-disks-tmp"
+      local base_dir="$mnt"
+      if [ -n "$SUBDIR" ]; then
+        base_dir="$mnt/$SUBDIR"
+        say "${BLUE}[LOG] Using sub-folder prefix: $SUBDIR${NC}" >&2
+      fi
+      tmpdir="$base_dir/test-disks-tmp"
       say "${BLUE}[LOG] Using mount point: $mnt${NC}" >&2
     else
       say "${RED}[LOG] Partition $part is not mounted${NC}" >&2
@@ -168,7 +246,7 @@ cleanup_temp() {
 }
 
 # Process each partition
-for PART in "$@"; do
+for PART in "${PARTITIONS[@]}"; do
   echo ""
   say "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
   say "${BLUE}Testing Partition: $PART${NC}"
